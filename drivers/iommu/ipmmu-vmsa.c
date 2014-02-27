@@ -906,6 +906,8 @@ static int ipmmu_attach_device(struct iommu_domain *io_domain,
 		return -ENXIO;
 	}
 
+	dev_dbg(mmu->dev, "%s(%s)\n", __func__, dev_name(dev));
+
 	spin_lock_irqsave(&domain->lock, flags);
 
 	if (!domain->mmu) {
@@ -940,6 +942,8 @@ static void ipmmu_detach_device(struct iommu_domain *io_domain,
 	struct ipmmu_vmsa_domain *domain = io_domain->priv;
 	unsigned int i;
 
+	dev_dbg(domain->mmu->dev, "%s(%s)\n", __func__, dev_name(dev));
+
 	for (i = 0; i < archdata->num_utlbs; ++i)
 		ipmmu_utlb_disable(domain, archdata->utlbs[i]);
 
@@ -956,6 +960,9 @@ static int ipmmu_map(struct iommu_domain *io_domain, unsigned long iova,
 	if (!domain)
 		return -ENODEV;
 
+	dev_dbg(domain->mmu->dev, "%s(0x%08lx, %pap, %zu, 0x%08x)\n",
+		 __func__, iova, &paddr, size, prot);
+
 	return ipmmu_create_mapping(domain, iova, paddr, size, prot);
 }
 
@@ -964,6 +971,9 @@ static size_t ipmmu_unmap(struct iommu_domain *io_domain, unsigned long iova,
 {
 	struct ipmmu_vmsa_domain *domain = io_domain->priv;
 	int ret;
+
+	dev_dbg(domain->mmu->dev, "%s(0x%08lx, %zu)\n",
+		 __func__, iova, size);
 
 	ret = ipmmu_clear_mapping(domain, iova, size);
 	return ret ? 0 : size;
@@ -1167,6 +1177,9 @@ static int ipmmu_add_device(struct device *dev)
 		dev_err(dev, "Failed to attach device to VA mapping\n");
 		goto error;
 	}
+
+	dev_dbg(dev, "device linked to IPMMU %s, %u utlbs\n",
+		dev_name(mmu->dev), num_utlbs);
 
 	return 0;
 
