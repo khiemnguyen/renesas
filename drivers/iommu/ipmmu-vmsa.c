@@ -533,9 +533,14 @@ static pte_t *ipmmu_alloc_pte(struct ipmmu_vmsa_device *mmu, pmd_t *pmd,
 	if (!pte)
 		return NULL;
 
+	({ phys_addr_t pa = __pa(pte);
+	dev_dbg(mmu->dev, "allocated PTE @VA 0x%p PA %pap\n", pte, &pa); });
+
 	ipmmu_flush_pgtable(mmu, pte, PAGE_SIZE);
 	*pmd = __pmd(__pa(pte) | PMD_NSTABLE | PMD_TYPE_TABLE);
 	ipmmu_flush_pgtable(mmu, pmd, sizeof(*pmd));
+
+	dev_dbg(mmu->dev, "PMD @VA 0x%p set to 0x%16llx\n", pmd, pmd_val(*pmd));
 
 	return pte + pte_index(iova);
 }
@@ -546,6 +551,8 @@ static pmd_t *ipmmu_alloc_pmd(struct ipmmu_vmsa_device *mmu, pgd_t *pgd,
 	pud_t *pud = (pud_t *)pgd;
 	pmd_t *pmd;
 
+	dev_dbg(mmu->dev, "using PUD @VA 0x%p\n", pud);
+
 	if (!pud_none(*pud))
 		return pmd_offset(pud, iova);
 
@@ -553,9 +560,14 @@ static pmd_t *ipmmu_alloc_pmd(struct ipmmu_vmsa_device *mmu, pgd_t *pgd,
 	if (!pmd)
 		return NULL;
 
+	({ phys_addr_t pa = __pa(pmd);
+	dev_dbg(mmu->dev, "allocated PMD @VA 0x%p PA %pap\n", pmd, &pa); });
+
 	ipmmu_flush_pgtable(mmu, pmd, PAGE_SIZE);
 	*pud = __pud(__pa(pmd) | PMD_NSTABLE | PMD_TYPE_TABLE);
 	ipmmu_flush_pgtable(mmu, pud, sizeof(*pud));
+
+	dev_dbg(mmu->dev, "PUD @VA 0x%p set to 0x%16llx\n", pud, pud_val(*pud));
 
 	return pmd + pmd_index(iova);
 }
@@ -606,8 +618,12 @@ static int ipmmu_alloc_init_pte(struct ipmmu_vmsa_device *mmu, pmd_t *pmd,
 		num_ptes = ARM_VMSA_PTE_CONT_ENTRIES;
 	}
 
-	for (i = num_ptes; i; --i)
-		*pte++ = pfn_pte(pfn++, __pgprot(pteval));
+	for (i = num_ptes; i; --i) {
+		*pte = pfn_pte(pfn++, __pgprot(pteval));
+		dev_dbg(mmu->dev, "PTE @VA 0x%p set to 0x%16llx\n",
+			pte, pte_val(*pte));
+		pte++;
+	}
 
 	ipmmu_flush_pgtable(mmu, start, sizeof(*pte) * num_ptes);
 
@@ -623,6 +639,8 @@ static int ipmmu_alloc_init_pmd(struct ipmmu_vmsa_device *mmu, pmd_t *pmd,
 	*pmd = pfn_pmd(pfn, __pgprot(pmdval));
 	ipmmu_flush_pgtable(mmu, pmd, sizeof(*pmd));
 
+	dev_dbg(mmu->dev, "PMD @VA 0x%p set to 0x%16llx\n", pmd, pmd_val(*pmd));
+
 	return 0;
 }
 
@@ -637,6 +655,10 @@ static int ipmmu_create_mapping(struct ipmmu_vmsa_domain *domain,
 	pmd_t *pmd;
 	int ret;
 
+	({ phys_addr_t pa = __pa(domain->pgd);
+	dev_dbg(mmu->dev, "global PGD @VA 0x%p PA %pap\n",
+		domain->pgd, &pa); });
+
 	if (!pgd)
 		return -EINVAL;
 
@@ -649,6 +671,8 @@ static int ipmmu_create_mapping(struct ipmmu_vmsa_domain *domain,
 	pfn = __phys_to_pfn(paddr);
 	pgd += pgd_index(iova);
 
+	dev_dbg(mmu->dev, "using PGD @VA 0x%p\n", pgd);
+
 	/* Update the page tables. */
 	spin_lock_irqsave(&domain->lock, flags);
 
@@ -657,6 +681,8 @@ static int ipmmu_create_mapping(struct ipmmu_vmsa_domain *domain,
 		ret = -ENOMEM;
 		goto done;
 	}
+
+	dev_dbg(mmu->dev, "using PMD @VA 0x%p\n", pmd);
 
 	switch (size) {
 	case SZ_2M:
@@ -684,11 +710,16 @@ static void ipmmu_clear_pud(struct ipmmu_vmsa_device *mmu, pud_t *pud)
 {
 	pgtable_t table = pud_pgtable(*pud);
 
+	dev_dbg(mmu->dev, "clearing PUD @VA 0x%p\n", pud);
+
 	/* Clear the PUD. */
 	*pud = __pud(0);
 	ipmmu_flush_pgtable(mmu, pud, sizeof(*pud));
 
 	/* Free the page table. */
+	({ phys_addr_t pa = page_to_phys(table);
+	dev_dbg(mmu->dev, "freeing pgtable @PA %pap\n", &pa); });
+
 	__free_page(table);
 }
 
@@ -698,6 +729,8 @@ static void ipmmu_clear_pmd(struct ipmmu_vmsa_device *mmu, pud_t *pud,
 	pmd_t pmdval = *pmd;
 	unsigned int i;
 
+	dev_dbg(mmu->dev, "clearing PMD @VA 0x%p\n", pmd);
+
 	/* Clear the PMD. */
 	*pmd = __pmd(0);
 	ipmmu_flush_pgtable(mmu, pmd, sizeof(*pmd));
@@ -705,6 +738,10 @@ static void ipmmu_clear_pmd(struct ipmmu_vmsa_device *mmu, pud_t *pud,
 	/* Free the page table. */
 	if (pmd_table(pmdval)) {
 		pgtable_t table = pmd_pgtable(pmdval);
+
+		({ phys_addr_t pa = page_to_phys(table);
+		dev_dbg(mmu->dev, "freeing pgtable @PA %pap\n", &pa); });
+
 		__free_page(table);
 	}
 
@@ -723,6 +760,8 @@ static void ipmmu_clear_pte(struct ipmmu_vmsa_device *mmu, pud_t *pud,
 			    pmd_t *pmd, pte_t *pte, unsigned int num_ptes)
 {
 	unsigned int i;
+
+	dev_dbg(mmu->dev, "clearing %u PTE @VA 0x%p\n", num_ptes, pte);
 
 	/* Clear the PTE. */
 	for (i = num_ptes; i; --i)
@@ -748,9 +787,14 @@ static int ipmmu_split_pmd(struct ipmmu_vmsa_device *mmu, pmd_t *pmd)
 	unsigned long pfn;
 	unsigned int i;
 
+	dev_dbg(mmu->dev, "splitting PMD @VA 0x%p\n", pmd);
+
 	pte = (pte_t *)get_zeroed_page(GFP_ATOMIC);
 	if (!pte)
 		return -ENOMEM;
+
+	({ phys_addr_t pa = __pa(pte);
+	dev_dbg(mmu->dev, "allocated PTE @VA 0x%p PA %pap\n", pte, &pa); });
 
 	/* Copy the PMD attributes. */
 	pteval = (pmd_val(*pmd) & ARM_VMSA_PTE_ATTRS_MASK)
@@ -759,12 +803,18 @@ static int ipmmu_split_pmd(struct ipmmu_vmsa_device *mmu, pmd_t *pmd)
 	pfn = pmd_pfn(*pmd);
 	start = pte;
 
-	for (i = IPMMU_PTRS_PER_PTE; i; --i)
-		*pte++ = pfn_pte(pfn++, __pgprot(pteval));
+	for (i = IPMMU_PTRS_PER_PTE; i; --i) {
+		*pte = pfn_pte(pfn++, __pgprot(pteval));
+		dev_dbg(mmu->dev, "PTE @VA 0x%p set to 0x%16llx\n",
+			pte, pte_val(*pte));
+		pte++;
+	}
 
 	ipmmu_flush_pgtable(mmu, start, PAGE_SIZE);
 	*pmd = __pmd(__pa(start) | PMD_NSTABLE | PMD_TYPE_TABLE);
 	ipmmu_flush_pgtable(mmu, pmd, sizeof(*pmd));
+
+	dev_dbg(mmu->dev, "PMD @VA 0x%p set to 0x%16llx\n", pmd, pmd_val(*pmd));
 
 	return 0;
 }
@@ -773,8 +823,13 @@ static void ipmmu_split_pte(struct ipmmu_vmsa_device *mmu, pte_t *pte)
 {
 	unsigned int i;
 
-	for (i = ARM_VMSA_PTE_CONT_ENTRIES; i; --i)
+	dev_dbg(mmu->dev, "splitting PTE @VA 0x%p\n", pte);
+
+	for (i = ARM_VMSA_PTE_CONT_ENTRIES; i; --i) {
 		pte[i-1] = __pte(pte_val(*pte) & ~ARM_VMSA_PTE_CONT);
+		dev_dbg(mmu->dev, "PTE @VA 0x%p set to 0x%16llx\n",
+			&pte[i-1], pte_val(pte[i-1]));
+	}
 
 	ipmmu_flush_pgtable(mmu, pte, sizeof(*pte) * ARM_VMSA_PTE_CONT_ENTRIES);
 }
