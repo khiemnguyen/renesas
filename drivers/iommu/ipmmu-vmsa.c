@@ -16,6 +16,7 @@
 #include <linux/io.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_data/ipmmu-vmsa.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
@@ -1001,16 +1002,33 @@ static phys_addr_t ipmmu_iova_to_phys(struct iommu_domain *io_domain,
 
 static int ipmmu_find_utlb(struct ipmmu_vmsa_device *mmu, struct device *dev)
 {
-	const struct ipmmu_vmsa_master *master = mmu->pdata->masters;
-	const char *devname = dev_name(dev);
-	unsigned int i;
+	struct of_phandle_args args;
+	int ret;
 
-	for (i = 0; i < mmu->pdata->num_masters; ++i, ++master) {
-		if (strcmp(master->name, devname) == 0)
-			return master->utlb;
+	if (mmu->pdata) {
+		const struct ipmmu_vmsa_master *master = mmu->pdata->masters;
+		const char *devname = dev_name(dev);
+		unsigned int i;
+
+		for (i = 0; i < mmu->pdata->num_masters; ++i, ++master) {
+			if (strcmp(master->name, devname) == 0)
+				return master->utlb;
+		}
+
+		return -1;
 	}
 
-	return -1;
+	ret = of_parse_phandle_with_args(dev->of_node, "iommus",
+					 "#iommu-cells", 0, &args);
+	if (ret < 0)
+		return -1;
+
+	of_node_put(args.np);
+
+	if (args.np != mmu->dev->of_node || args.args_count != 1)
+		return -1;
+
+	return args.args[0];
 }
 
 static int ipmmu_add_device(struct device *dev)
@@ -1155,7 +1173,7 @@ static int ipmmu_probe(struct platform_device *pdev)
 	int irq;
 	int ret;
 
-	if (!pdev->dev.platform_data) {
+	if (!IS_ENABLED(CONFIG_OF) && !pdev->dev.platform_data) {
 		dev_err(&pdev->dev, "missing platform data\n");
 		return -EINVAL;
 	}
@@ -1221,10 +1239,15 @@ static int ipmmu_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct of_device_id ipmmu_of_ids[] = {
+	{ .compatible = "renesas,ipmmu-vmsa", },
+};
+
 static struct platform_driver ipmmu_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "ipmmu-vmsa",
+		.of_match_table = of_match_ptr(ipmmu_of_ids),
 	},
 	.probe = ipmmu_probe,
 	.remove	= ipmmu_remove,
