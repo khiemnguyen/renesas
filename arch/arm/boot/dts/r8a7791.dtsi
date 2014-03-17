@@ -1058,6 +1058,62 @@
 		status = "disabled";
 	};
 
+	ipmmu_sy0: mmu@e6280800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xe6280800 0 0x800>;
+		interrupts = <0 223 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_sy1: mmu@e6290800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xe6290800 0 0x800>;
+		interrupts = <0 225 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_ds: mmu@e6740800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xe6740800 0 0x800>;
+		interrupts = <0 198 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_mp: mmu@ec680800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xec680800 0 0x800>;
+		interrupts = <0 226 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_mx: mmu@fe951800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xfe951800 0 0x800>;
+		interrupts = <0 222 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_rt: mmu@ffc80800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xffc80800 0 0x800>;
+		interrupts = <0 307 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
+	ipmmu_gp: mmu@e62a0800 {
+		compatible = "renesas,ipmmu-vmsa";
+		reg = <0 0xe62a0800 0 0x800>;
+		interrupts = <0 260 IRQ_TYPE_LEVEL_HIGH>;
+		#iommu-cells = <1>;
+		status = "disabled";
+	};
+
 	rcar_sound: rcar_sound@0xec500000 {
 		#sound-dai-cells = <1>;
 		compatible =  "renesas,rcar_sound-r8a7791", "renesas,rcar_sound-gen2", "renesas,rcar_sound";
