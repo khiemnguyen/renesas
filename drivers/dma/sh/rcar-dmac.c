@@ -10,6 +10,8 @@
  * published by the Free Software Foundation.
  */
 
+#define DEBUG
+
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
 #include <linux/interrupt.h>
@@ -291,14 +293,25 @@ static u32 rcar_dmac_read(struct rcar_dmac *dmac, u32 reg)
 
 static u32 rcar_dmac_chan_read(struct rcar_dmac_chan *chan, u32 reg)
 {
+	u32 data;
+
 	if (reg == RCAR_DMARS)
-		return readw(chan->iomem + reg);
+		data = readw(chan->iomem + reg);
 	else
-		return readl(chan->iomem + reg);
+		data = readl(chan->iomem + reg);
+
+	dev_dbg(chan->chan.device->dev,
+		"chan%u: read 0x%08x from 0x%04x\n",
+		chan->index, data, reg);
+	return data;
 }
 
 static void rcar_dmac_chan_write(struct rcar_dmac_chan *chan, u32 reg, u32 data)
 {
+	dev_dbg(chan->chan.device->dev,
+		"chan%u: write 0x%08x to 0x%04x\n",
+		chan->index, data, reg);
+
 	if (reg == RCAR_DMARS)
 		writew(data, chan->iomem + reg);
 	else
@@ -394,6 +407,8 @@ static int rcar_dmac_init(struct rcar_dmac *dmac)
 {
 	u16 dmaor;
 
+	dev_dbg(dmac->engine.dev, "%s\n", __func__);
+
 	/* Clear all channels and enable the DMAC globally. */
 	rcar_dmac_write(dmac, RCAR_DMACHCLR, 0x7fff);
 	rcar_dmac_write(dmac, RCAR_DMAOR,
@@ -436,12 +451,18 @@ static dma_cookie_t rcar_dmac_tx_submit(struct dma_async_tx_descriptor *tx)
 	/* Resume the device when submitting the first descriptor. */
 	resume = chan->desc.submitted++ == 0;
 
+	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: submitted %u\n",
+		chan->index, chan->desc.submitted);
+
 	spin_unlock_irqrestore(&chan->lock, flags);
 
 	if (resume)
 		pm_runtime_get_sync(chan->chan.device->dev);
 
 	mutex_unlock(&chan->power_lock);
+
+	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: resume %u\n",
+		chan->index, resume);
 
 	return cookie;
 }
@@ -470,6 +491,10 @@ static int rcar_dmac_desc_alloc(struct rcar_dmac_chan *chan)
 		dma_async_tx_descriptor_init(&desc->async_tx, &chan->chan);
 		desc->async_tx.tx_submit = rcar_dmac_tx_submit;
 		INIT_LIST_HEAD(&desc->chunks);
+
+//		dev_dbg(chan->chan.device->dev,
+//			"chan%u: adding desc %p to free list\n",
+//			chan->index, desc);
 
 		list_add_tail(&desc->node, &list);
 	}
@@ -706,6 +731,9 @@ static void rcar_dmac_chan_halt(struct rcar_dmac_chan *chan)
 
 	chcr &= ~(RCAR_DMACHCR_IE | RCAR_DMACHCR_TE | RCAR_DMACHCR_DE);
 	rcar_dmac_chan_write(chan, RCAR_DMACHCR, chcr);
+
+	dev_dbg(chan->chan.device->dev,
+		"chan%u: halt chcr 0x%08x\n",  chan->index, chcr);
 }
 
 static void rcar_dmac_chan_reinit(struct rcar_dmac_chan *chan)
@@ -846,6 +874,10 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	if (!desc)
 		return NULL;
 
+//	dev_dbg(chan->chan.device->dev,
+//		"chan%u: preparing desc %p with %u chunks\n",
+//		chan->index, desc, chunks);
+
 	desc->async_tx.flags = dma_flags;
 	desc->async_tx.cookie = -EBUSY;
 
@@ -855,6 +887,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	rcar_dmac_chan_configure_desc(chan, desc);
 
 	max_chunk_size = (RCAR_DMATCR_MASK + 1) << desc->xfer_shift;
+	max_chunk_size = PAGE_SIZE;
 
 	/*
 	 * Allocate and fill the transfer chunk descriptors. We own the only
@@ -933,7 +966,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	 * performance improvement would be significant enough compared to the
 	 * additional complexity remains to be studied.
 	 */
-	if (!highmem && nchunks > 1)
+	if (!highmem && nchunks > 0)
 		rcar_dmac_fill_hwdesc(chan, desc);
 
 	return &desc->async_tx;
@@ -1227,6 +1260,10 @@ static void rcar_dmac_issue_pending(struct dma_chan *chan)
 					struct rcar_dmac_desc, node);
 		rchan->desc.running = desc;
 
+		dev_dbg(chan->device->dev,
+			"chan%u: setting running descriptor to %p\n",
+			rchan->index, desc);
+
 		rcar_dmac_chan_start_xfer(rchan);
 	}
 
@@ -1330,6 +1367,9 @@ static irqreturn_t rcar_dmac_isr_transfer_end(struct rcar_dmac_chan *chan)
 	else
 		chan->desc.running = NULL;
 
+	dev_dbg(chan->chan.device->dev, "chan%u: isr: submitted %u\n",
+		chan->index, chan->desc.submitted);
+
 	/* Suspend the device if no descriptor is pending. */
 	if (!chan->desc.submitted)
 		pm_runtime_put(chan->chan.device->dev);
@@ -1352,6 +1392,9 @@ static irqreturn_t rcar_dmac_isr_channel(int irq, void *dev)
 	chcr = rcar_dmac_chan_read(chan, RCAR_DMACHCR);
 	rcar_dmac_chan_write(chan, RCAR_DMACHCR,
 			     chcr & ~(RCAR_DMACHCR_TE | RCAR_DMACHCR_DE));
+
+	dev_dbg(chan->chan.device->dev, "chan%u: irq chcr 0x%08x\n",
+		chan->index, chcr);
 
 	if (chcr & RCAR_DMACHCR_DSE)
 		ret |= rcar_dmac_isr_desc_stage_end(chan);
@@ -1422,6 +1465,8 @@ static irqreturn_t rcar_dmac_isr_channel_thread(int irq, void *dev)
 static irqreturn_t rcar_dmac_isr_error(int irq, void *data)
 {
 	struct rcar_dmac *dmac = data;
+
+	dev_err(dmac->engine.dev, "error irq\n");
 
 	if (!(rcar_dmac_read(dmac, RCAR_DMAOR) & RCAR_DMAOR_AE))
 		return IRQ_NONE;
