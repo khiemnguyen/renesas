@@ -192,7 +192,7 @@ struct rcar_dmac {
 #define RCAR_DMACHCR_DPM_DISABLED	(0 << 28)
 #define RCAR_DMACHCR_DPM_ENABLED	(1 << 28)
 #define RCAR_DMACHCR_DPM_REPEAT		(2 << 28)
-#define RCAR_DMACHCR_DPM_INFINIE	(3 << 28)
+#define RCAR_DMACHCR_DPM_INFINITE	(3 << 28)
 #define RCAR_DMACHCR_RPT_SAR		(1 << 27)
 #define RCAR_DMACHCR_RPT_DAR		(1 << 26)
 #define RCAR_DMACHCR_RPT_TCR		(1 << 25)
