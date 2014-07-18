@@ -488,8 +488,8 @@ static int rcar_dmac_desc_alloc(struct rcar_dmac_chan *chan)
  * @desc: the descriptor
  *
  * Put the descriptor and its transfer chunk descriptors back in the channel's
- * free descriptors lists, and free the hardware descriptors list memory. The
- * descriptor's chunks list will be reinitialized to an empty list as a result.
+ * free descriptors lists. The descriptor's chunks list will be reinitialized to
+ * an empty list as a result.
  *
  * The descriptor must have been removed from the channel's lists before calling
  * this function.
@@ -499,12 +499,6 @@ static int rcar_dmac_desc_alloc(struct rcar_dmac_chan *chan)
 static void rcar_dmac_desc_put(struct rcar_dmac_chan *chan,
 			       struct rcar_dmac_desc *desc)
 {
-	if (desc->hwdescs.mem) {
-		dma_free_coherent(NULL, desc->hwdescs.size, desc->hwdescs.mem,
-				  desc->hwdescs.dma);
-		desc->hwdescs.mem = NULL;
-	}
-
 	spin_lock_irq(&chan->lock);
 	list_splice_tail_init(&desc->chunks, &chan->desc.chunks_free);
 	list_add_tail(&desc->node, &chan->desc.free);
@@ -658,19 +652,41 @@ rcar_dmac_xfer_chunk_get(struct rcar_dmac_chan *chan)
 	return chunk;
 }
 
-static void rcar_dmac_alloc_hwdesc(struct rcar_dmac_chan *chan,
-				   struct rcar_dmac_desc *desc)
+static void rcar_dmac_realloc_hwdesc(struct rcar_dmac_chan *chan,
+				     struct rcar_dmac_desc *desc, size_t size)
+{
+	if (desc->hwdescs.size == size)
+		return;
+
+	if (desc->hwdescs.mem) {
+		dma_free_coherent(NULL, desc->hwdescs.size, desc->hwdescs.mem,
+				   desc->hwdescs.dma);
+		desc->hwdescs.mem = NULL;
+		desc->hwdescs.size = 0;
+	}
+
+	if (!size)
+		return;
+
+	desc->hwdescs.mem = dma_alloc_coherent(NULL, size, &desc->hwdescs.dma,
+					       GFP_KERNEL);
+	if (!desc->hwdescs.mem)
+		return;
+
+	desc->hwdescs.size = size;
+}
+
+static void rcar_dmac_fill_hwdesc(struct rcar_dmac_chan *chan,
+				  struct rcar_dmac_desc *desc)
 {
 	struct rcar_dmac_xfer_chunk *chunk;
 	struct rcar_dmac_hw_desc *hwdesc;
-	size_t size = desc->nchunks * sizeof(*hwdesc);
 
-	hwdesc = dma_alloc_coherent(NULL, size, &desc->hwdescs.dma, GFP_KERNEL);
+	rcar_dmac_realloc_hwdesc(chan, desc, desc->nchunks * sizeof(*hwdesc));
+
+	hwdesc = desc->hwdescs.mem;
 	if (!hwdesc)
 		return;
-
-	desc->hwdescs.mem = hwdesc;
-	desc->hwdescs.size = size;
 
 	list_for_each_entry(chunk, &desc->chunks, node) {
 		hwdesc->sar = chunk->src_addr;
@@ -918,7 +934,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	 * additional complexity remains to be studied.
 	 */
 	if (!highmem && nchunks > 1)
-		rcar_dmac_alloc_hwdesc(chan, desc);
+		rcar_dmac_fill_hwdesc(chan, desc);
 
 	return &desc->async_tx;
 }
@@ -953,6 +969,8 @@ static void rcar_dmac_free_chan_resources(struct dma_chan *chan)
 	struct rcar_dmac_chan *rchan = to_rcar_dmac_chan(chan);
 	struct rcar_dmac *dmac = to_rcar_dmac(chan->device);
 	struct rcar_dmac_desc_page *page, *_page;
+	struct rcar_dmac_desc *desc;
+	LIST_HEAD(list);
 
 	/* Protect against ISR */
 	spin_lock_irq(&rchan->lock);
@@ -966,6 +984,15 @@ static void rcar_dmac_free_chan_resources(struct dma_chan *chan)
 		clear_bit(rchan->mid_rid, dmac->modules);
 		rchan->mid_rid = -EINVAL;
 	}
+
+	list_splice(&rchan->desc.free, &list);
+	list_splice(&rchan->desc.pending, &list);
+	list_splice(&rchan->desc.active, &list);
+	list_splice(&rchan->desc.done, &list);
+	list_splice(&rchan->desc.wait, &list);
+
+	list_for_each_entry(desc, &list, node)
+		rcar_dmac_realloc_hwdesc(rchan, desc, 0);
 
 	list_for_each_entry_safe(page, _page, &rchan->desc.pages, node) {
 		list_del(&page->node);
