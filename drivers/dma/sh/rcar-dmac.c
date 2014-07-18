@@ -242,7 +242,6 @@ struct rcar_dmac {
 
 /* Hardcode the MEMCPY transfer size to 4 bytes. */
 #define RCAR_DMAC_MEMCPY_XFER_SIZE	4
-#define RCAR_DMAC_MAX_XFER_LEN		(RCAR_DMATCR_MASK + 1)
 
 /* -----------------------------------------------------------------------------
  * Device access
@@ -701,6 +700,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	struct rcar_dmac_xfer_chunk *chunk;
 	struct rcar_dmac_desc *desc;
 	struct scatterlist *sg = sgl;
+	size_t max_chunk_size;
 	size_t full_size = 0;
 	unsigned int i;
 
@@ -716,6 +716,8 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 
 	rcar_dmac_chan_configure_desc(chan, desc);
 
+	max_chunk_size = (RCAR_DMATCR_MASK + 1) << desc->xfer_shift;
+
 	/*
 	 * Allocate and fill the transfer chunk descriptors. We own the only
 	 * reference to the DMA descriptor, there's no need for locking.
@@ -727,7 +729,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 		full_size += len;
 
 		while (len) {
-			size_t size = min_t(size_t, len, RCAR_DMAC_MAX_XFER_LEN);
+			size_t size = min_t(size_t, len, max_chunk_size);
 
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 			/*
