@@ -266,6 +266,11 @@
 		clock-names = "fck";
 		#dma-cells = <1>;
 		dma-channels = <15>;
+		iommus = <&ipmmu_ds 0>,  <&ipmmu_ds 1>,  <&ipmmu_ds 2>,
+			 <&ipmmu_ds 3>,  <&ipmmu_ds 4>,  <&ipmmu_ds 5>,
+			 <&ipmmu_ds 6>,  <&ipmmu_ds 7>,  <&ipmmu_ds 8>,
+			 <&ipmmu_ds 9>,  <&ipmmu_ds 10>, <&ipmmu_ds 11>,
+			 <&ipmmu_ds 12>, <&ipmmu_ds 13>, <&ipmmu_ds 14>;
 	};
 
 	dmac1: dma-controller@e6720000 {
@@ -296,6 +301,11 @@
 		clock-names = "fck";
 		#dma-cells = <1>;
 		dma-channels = <15>;
+		iommus = <&ipmmu_ds 15>, <&ipmmu_ds 16>, <&ipmmu_ds 17>,
+			 <&ipmmu_ds 18>, <&ipmmu_ds 19>, <&ipmmu_ds 20>,
+			 <&ipmmu_ds 21>, <&ipmmu_ds 22>, <&ipmmu_ds 23>,
+			 <&ipmmu_ds 24>, <&ipmmu_ds 25>, <&ipmmu_ds 26>,
+			 <&ipmmu_ds 27>, <&ipmmu_ds 28>, <&ipmmu_ds 29>;
 	};
 
 	/* The memory map in the User's Manual maps the cores to bus numbers */
@@ -1156,7 +1166,6 @@
 		reg = <0 0xe6740800 0 0x800>;
 		interrupts = <0 198 IRQ_TYPE_LEVEL_HIGH>;
 		#iommu-cells = <1>;
-		status = "disabled";
 	};
 
 	ipmmu_mp: mmu@ec680800 {
