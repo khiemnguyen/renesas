@@ -1228,7 +1228,7 @@ static irqreturn_t rcar_dmac_isr_error(int irq, void *data)
 static bool rcar_dmac_chan_filter(struct dma_chan *chan, void *arg)
 {
 	struct rcar_dmac *dmac = to_rcar_dmac(chan->device);
-	unsigned int id = (unsigned int)arg;
+	struct of_phandle_args *dma_spec = arg;
 
 	/*
 	 * FIXME: Using a filter on OF platforms is a nonsense. The OF xlate
@@ -1237,10 +1237,11 @@ static bool rcar_dmac_chan_filter(struct dma_chan *chan, void *arg)
 	 * Forcing it to call dma_request_channel() and iterate through all
 	 * channels from all controllers is just pointless.
 	 */
-	if (chan->device->device_control != rcar_dmac_control)
+	if (chan->device->device_control != rcar_dmac_control ||
+	    dma_spec->np != chan->device->dev->of_node)
 		return false;
 
-	return !test_and_set_bit(id, dmac->modules);
+	return !test_and_set_bit(dma_spec->args[0], dmac->modules);
 }
 
 static struct dma_chan *rcar_dmac_of_xlate(struct of_phandle_args *dma_spec,
@@ -1257,8 +1258,7 @@ static struct dma_chan *rcar_dmac_of_xlate(struct of_phandle_args *dma_spec,
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
-	chan = dma_request_channel(mask, rcar_dmac_chan_filter,
-				   (void *)dma_spec->args[0]);
+	chan = dma_request_channel(mask, rcar_dmac_chan_filter, dma_spec);
 	if (!chan)
 		return NULL;
 
