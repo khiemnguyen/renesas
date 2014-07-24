@@ -316,6 +316,8 @@ static void ipmmu_tlb_sync(struct ipmmu_vmsa_domain *domain)
 
 static void ipmmu_tlb_invalidate(struct ipmmu_vmsa_domain *domain)
 {
+	struct ipmmu_vmsa_device *mmu = domain->mmu;
+	unsigned int i;
 	u32 reg;
 
 	dev_dbg(domain->mmu->dev, "invalidating TLB\n");
@@ -323,6 +325,12 @@ static void ipmmu_tlb_invalidate(struct ipmmu_vmsa_domain *domain)
 	reg = ipmmu_ctx_read(domain, IMCTR);
 	reg |= IMCTR_FLUSH;
 	ipmmu_ctx_write(domain, IMCTR, reg);
+
+	for (i = 0; i < mmu->num_utlbs; ++i) {
+		u32 imuctr = ipmmu_read(mmu, IMUCTR(i));
+		if (imuctr & IMUCTR_MMUEN)
+			ipmmu_write(mmu, IMUCTR(i), imuctr | IMUCTR_FLUSH);
+	}
 
 	ipmmu_tlb_sync(domain);
 }
@@ -341,7 +349,7 @@ static void ipmmu_utlb_enable(struct ipmmu_vmsa_domain *domain,
 	 */
 
 	/* TODO: What should we set the ASID to ? */
-	ipmmu_write(mmu, IMUASID(utlb), 0);
+	ipmmu_write(mmu, IMUASID(utlb), 1);
 	/* TODO: Do we need to flush the microTLB ? */
 	ipmmu_write(mmu, IMUCTR(utlb),
 		    IMUCTR_TTSEL_MMU(domain->context_id) | IMUCTR_FLUSH |
@@ -370,6 +378,7 @@ static void ipmmu_flush_pgtable(struct ipmmu_vmsa_device *mmu, void *addr,
 	 */
 	dev_dbg(mmu->dev, "flushing pgtable %zu bytes @0x%p\n", size, addr);
 	dma_map_page(mmu->dev, virt_to_page(addr), offset, size, DMA_TO_DEVICE);
+	flush_cache_all();
 }
 
 /* -----------------------------------------------------------------------------
