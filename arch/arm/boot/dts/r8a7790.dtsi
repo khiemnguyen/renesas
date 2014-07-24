@@ -403,7 +403,7 @@
 		reg = <0 0xee200000 0 0x80>;
 		interrupts = <0 169 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_MMCIF0>;
-		dmas = <&dmac0 0xd1>, <&dmac0 0xd2>;
+//		dmas = <&dmac0 0xd1>, <&dmac0 0xd2>;
 		dma-names = "tx", "rx";
 		reg-io-width = <4>;
 		status = "disabled";
@@ -414,7 +414,7 @@
 		reg = <0 0xee220000 0 0x80>;
 		interrupts = <0 170 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_MMCIF1>;
-		dmas = <&dmac0 0xe1>, <&dmac0 0xe2>;
+//		dmas = <&dmac0 0xe1>, <&dmac0 0xe2>;
 		dma-names = "tx", "rx";
 		reg-io-width = <4>;
 		status = "disabled";
@@ -430,7 +430,7 @@
 		reg = <0 0xee100000 0 0x200>;
 		interrupts = <0 165 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_SDHI0>;
-		dmas = <&dmac0 0xcd>, <&dmac0 0xce>;
+//		dmas = <&dmac0 0xcd>, <&dmac0 0xce>;
 		dma-names = "tx", "rx";
 		cap-sd-highspeed;
 		status = "disabled";
@@ -441,7 +441,7 @@
 		reg = <0 0xee120000 0 0x200>;
 		interrupts = <0 166 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_SDHI1>;
-		dmas = <&dmac0 0xc9>, <&dmac0 0xca>;
+//		dmas = <&dmac0 0xc9>, <&dmac0 0xca>;
 		dma-names = "tx", "rx";
 		cap-sd-highspeed;
 		status = "disabled";
@@ -452,7 +452,7 @@
 		reg = <0 0xee140000 0 0x100>;
 		interrupts = <0 167 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_SDHI2>;
-		dmas = <&dmac0 0xc1>, <&dmac0 0xc2>;
+//		dmas = <&dmac0 0xc1>, <&dmac0 0xc2>;
 		dma-names = "tx", "rx";
 		cap-sd-highspeed;
 		status = "disabled";
@@ -463,7 +463,7 @@
 		reg = <0 0xee160000 0 0x100>;
 		interrupts = <0 168 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&mstp3_clks R8A7790_CLK_SDHI3>;
-		dmas = <&dmac0 0xd3>, <&dmac0 0xd4>;
+//		dmas = <&dmac0 0xd3>, <&dmac0 0xd4>;
 		dma-names = "tx", "rx";
 		cap-sd-highspeed;
 		status = "disabled";
