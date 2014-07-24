@@ -300,17 +300,17 @@ static u32 rcar_dmac_chan_read(struct rcar_dmac_chan *chan, u32 reg)
 	else
 		data = readl(chan->iomem + reg);
 
-	dev_dbg(chan->chan.device->dev,
-		"chan%u: read 0x%08x from 0x%04x\n",
-		chan->index, data, reg);
+//	dev_dbg(chan->chan.device->dev,
+//		"chan%u: read 0x%08x from 0x%04x\n",
+//		chan->index, data, reg);
 	return data;
 }
 
 static void rcar_dmac_chan_write(struct rcar_dmac_chan *chan, u32 reg, u32 data)
 {
-	dev_dbg(chan->chan.device->dev,
-		"chan%u: write 0x%08x to 0x%04x\n",
-		chan->index, data, reg);
+//	dev_dbg(chan->chan.device->dev,
+//		"chan%u: write 0x%08x to 0x%04x\n",
+//		chan->index, data, reg);
 
 	if (reg == RCAR_DMARS)
 		writew(data, chan->iomem + reg);
@@ -451,8 +451,8 @@ static dma_cookie_t rcar_dmac_tx_submit(struct dma_async_tx_descriptor *tx)
 	/* Resume the device when submitting the first descriptor. */
 	resume = chan->desc.submitted++ == 0;
 
-	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: submitted %u\n",
-		chan->index, chan->desc.submitted);
+//	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: submitted %u\n",
+//		chan->index, chan->desc.submitted);
 
 	spin_unlock_irqrestore(&chan->lock, flags);
 
@@ -461,8 +461,8 @@ static dma_cookie_t rcar_dmac_tx_submit(struct dma_async_tx_descriptor *tx)
 
 	mutex_unlock(&chan->power_lock);
 
-	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: resume %u\n",
-		chan->index, resume);
+//	dev_dbg(chan->chan.device->dev, "chan%u: tx_submit: resume %u\n",
+//		chan->index, resume);
 
 	return cookie;
 }
@@ -887,7 +887,7 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	rcar_dmac_chan_configure_desc(chan, desc);
 
 	max_chunk_size = (RCAR_DMATCR_MASK + 1) << desc->xfer_shift;
-	max_chunk_size = PAGE_SIZE;
+//	max_chunk_size = PAGE_SIZE;
 
 	/*
 	 * Allocate and fill the transfer chunk descriptors. We own the only
@@ -966,8 +966,8 @@ rcar_dmac_chan_prep_sg(struct rcar_dmac_chan *chan, struct scatterlist *sgl,
 	 * performance improvement would be significant enough compared to the
 	 * additional complexity remains to be studied.
 	 */
-	if (!highmem && nchunks > 0)
-		rcar_dmac_fill_hwdesc(chan, desc);
+//	if (!highmem && nchunks > 0)
+//		rcar_dmac_fill_hwdesc(chan, desc);
 
 	return &desc->async_tx;
 }
@@ -1260,9 +1260,9 @@ static void rcar_dmac_issue_pending(struct dma_chan *chan)
 					struct rcar_dmac_desc, node);
 		rchan->desc.running = desc;
 
-		dev_dbg(chan->device->dev,
-			"chan%u: setting running descriptor to %p\n",
-			rchan->index, desc);
+//		dev_dbg(chan->device->dev,
+//			"chan%u: setting running descriptor to %p\n",
+//			rchan->index, desc);
 
 		rcar_dmac_chan_start_xfer(rchan);
 	}
