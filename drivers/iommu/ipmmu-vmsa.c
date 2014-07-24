@@ -174,6 +174,33 @@ static LIST_HEAD(ipmmu_devices);
 #define IMUASID_ASID0_MASK		(0xff << 0)
 #define IMUASID_ASID0_SHIFT		0
 
+#define IMPFMCTR			0x0580
+#define IMPFMCTR_MD_40			(0 << 12)
+#define IMPFMCTR_MD_32			(1 << 12)
+#define IMPFMCTR_MD_MMUN		(3 << 12)
+#define IMPFMCTR_SEL(n)			((n) << 8)
+#define IMPFMCTR_RST			(1 << 1)
+#define IMPFMCTR_EN			(1 << 0)
+
+#define IMPFMDCTR			0x0584
+#define IMPFMDCTR_DVMSEL1_ASID		(0 << 16)
+#define IMPFMDCTR_DVMSEL1_VA		(1 << 16)
+#define IMPFMDCTR_DVMSEL1_ERR		(2 << 16)
+#define IMPFMDCTR_DVMSEL0_ASID		(0 << 12)
+#define IMPFMDCTR_DVMSEL0_VA		(1 << 12)
+#define IMPFMDCTR_DVMSEL0_ERR		(2 << 12)
+#define IMPFMDCTR_RST			(1 << 1)
+#define IMPFMDCTR_EN			(1 << 0)
+
+#define IMPFMMTOTAL			0x0590
+#define IMPFMMHIT			0x0594
+#define IMPFMML3MISS			0x0598
+#define IMPFMML2MISS			0x059c
+#define IMPFMDTOTAL			0x05b0
+#define IMPFMDUSER			0x05b4
+#define IMPFMDLINV0			0x05b8
+#define IMPFMDLINV1			0x05bc
+
 /* -----------------------------------------------------------------------------
  * Page Table Bits
  */
@@ -244,6 +271,27 @@ static void ipmmu_ctx_write(struct ipmmu_vmsa_domain *domain, unsigned int reg,
 			    u32 data)
 {
 	ipmmu_write(domain->mmu, domain->context_id * IM_CTX_SIZE + reg, data);
+}
+
+/* -----------------------------------------------------------------------------
+ * Performance Monitoring
+ */
+
+static void ipmmu_perf_log(struct ipmmu_vmsa_device *mmu)
+{
+	dev_dbg(mmu->dev, "perf: total %u hit %u l3miss %u l2miss %u\n",
+		ipmmu_read(mmu, IMPFMMTOTAL), ipmmu_read(mmu, IMPFMMHIT),
+		ipmmu_read(mmu, IMPFMML3MISS), ipmmu_read(mmu, IMPFMML2MISS));
+}
+
+static void ipmmu_perf_enable(struct ipmmu_vmsa_device *mmu)
+{
+	ipmmu_write(mmu, IMPFMCTR, IMPFMCTR_MD_40 | IMPFMCTR_RST | IMPFMCTR_EN);
+}
+
+static void ipmmu_perf_disable(struct ipmmu_vmsa_device *mmu)
+{
+	ipmmu_write(mmu, IMPFMCTR, 0);
 }
 
 /* -----------------------------------------------------------------------------
@@ -1020,6 +1068,8 @@ static int ipmmu_map(struct iommu_domain *io_domain, unsigned long iova,
 	dev_dbg(domain->mmu->dev, "%s(0x%08lx, %pap, %zu, 0x%08x)\n",
 		 __func__, iova, &paddr, size, prot);
 
+	ipmmu_perf_log(domain->mmu);
+
 	return ipmmu_create_mapping(domain, iova, paddr, size, prot);
 }
 
@@ -1032,7 +1082,10 @@ static size_t ipmmu_unmap(struct iommu_domain *io_domain, unsigned long iova,
 	dev_dbg(domain->mmu->dev, "%s(0x%08lx, %zu)\n",
 		 __func__, iova, size);
 
+	ipmmu_perf_log(domain->mmu);
+
 	ret = ipmmu_clear_mapping(domain, iova, size);
+
 	return ret ? 0 : size;
 }
 
@@ -1335,6 +1388,7 @@ static int ipmmu_probe(struct platform_device *pdev)
 	}
 
 	ipmmu_device_reset(mmu);
+	ipmmu_perf_enable(mmu);
 
 	/*
 	 * We can't create the ARM mapping here as it requires the bus to have
@@ -1361,6 +1415,7 @@ static int ipmmu_remove(struct platform_device *pdev)
 
 	arm_iommu_release_mapping(mmu->mapping);
 
+	ipmmu_perf_disable(mmu);
 	ipmmu_device_reset(mmu);
 
 	return 0;
