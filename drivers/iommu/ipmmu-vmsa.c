@@ -8,6 +8,8 @@
  * the Free Software Foundation; version 2 of the License.
  */
 
+#define DEBUG
+
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
