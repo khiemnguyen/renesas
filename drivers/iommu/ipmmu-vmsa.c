@@ -318,6 +318,8 @@ static void ipmmu_tlb_invalidate(struct ipmmu_vmsa_domain *domain)
 {
 	u32 reg;
 
+	dev_dbg(domain->mmu->dev, "invalidating TLB\n");
+
 	reg = ipmmu_ctx_read(domain, IMCTR);
 	reg |= IMCTR_FLUSH;
 	ipmmu_ctx_write(domain, IMCTR, reg);
@@ -366,6 +368,7 @@ static void ipmmu_flush_pgtable(struct ipmmu_vmsa_device *mmu, void *addr,
 	 * TODO: Add support for coherent walk through CCI with DVM and remove
 	 * cache handling.
 	 */
+	dev_dbg(mmu->dev, "flushing pgtable %zu bytes @0x%p\n", size, addr);
 	dma_map_page(mmu->dev, virt_to_page(addr), offset, size, DMA_TO_DEVICE);
 }
 
