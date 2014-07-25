@@ -326,13 +326,13 @@ static void ipmmu_tlb_invalidate(struct ipmmu_vmsa_domain *domain)
 	reg |= IMCTR_FLUSH;
 	ipmmu_ctx_write(domain, IMCTR, reg);
 
+	ipmmu_tlb_sync(domain);
+
 	for (i = 0; i < mmu->num_utlbs; ++i) {
 		u32 imuctr = ipmmu_read(mmu, IMUCTR(i));
 		if (imuctr & IMUCTR_MMUEN)
 			ipmmu_write(mmu, IMUCTR(i), imuctr | IMUCTR_FLUSH);
 	}
-
-	ipmmu_tlb_sync(domain);
 }
 
 /*
@@ -530,13 +530,27 @@ static irqreturn_t ipmmu_irq(int irq, void *dev)
 
 #define pud_pgtable(pud) pfn_to_page(__phys_to_pfn(pud_val(pud) & PHYS_MASK))
 
-static void ipmmu_free_ptes(pmd_t *pmd)
+static void *ipmmu_alloc_page(struct ipmmu_vmsa_device *mmu)
 {
-	pgtable_t table = pmd_pgtable(*pmd);
-	__free_page(table);
+//	dma_addr_t dma;
+
+//	return dma_zalloc_coherent(mmu ? mmu->dev : NULL, PAGE_SIZE, &dma, GFP_NOWAIT);
+	return (void *)get_zeroed_page(GFP_ATOMIC);
 }
 
-static void ipmmu_free_pmds(pud_t *pud)
+static void ipmmu_free_page(struct ipmmu_vmsa_device *mmu, void *page)
+{
+//	dma_free_coherent(mmu ? mmu->dev : NULL, PAGE_SIZE, page, __pa(page));
+	__free_page(page);
+}
+
+static void ipmmu_free_ptes(struct ipmmu_vmsa_device *mmu, pmd_t *pmd)
+{
+	pgtable_t table = pmd_pgtable(*pmd);
+	ipmmu_free_page(mmu, table);
+}
+
+static void ipmmu_free_pmds(struct ipmmu_vmsa_device *mmu, pud_t *pud)
 {
 	pmd_t *pmd = pmd_offset(pud, 0);
 	pgtable_t table;
@@ -546,12 +560,12 @@ static void ipmmu_free_pmds(pud_t *pud)
 		if (!pmd_table(*pmd))
 			continue;
 
-		ipmmu_free_ptes(pmd);
+		ipmmu_free_ptes(mmu, pmd);
 		pmd++;
 	}
 
 	table = pud_pgtable(*pud);
-	__free_page(table);
+	ipmmu_free_page(mmu, table);
 }
 
 static void ipmmu_free_pgtables(struct ipmmu_vmsa_domain *domain)
@@ -569,11 +583,11 @@ static void ipmmu_free_pgtables(struct ipmmu_vmsa_domain *domain)
 	for (i = 0; i < IPMMU_PTRS_PER_PGD; ++i) {
 		if (pgd_none(*pgd))
 			continue;
-		ipmmu_free_pmds((pud_t *)pgd);
+		ipmmu_free_pmds(domain->mmu, (pud_t *)pgd);
 		pgd++;
 	}
 
-	kfree(pgd_base);
+	ipmmu_free_page(NULL, pgd_base);
 }
 
 /*
@@ -589,7 +603,7 @@ static pte_t *ipmmu_alloc_pte(struct ipmmu_vmsa_device *mmu, pmd_t *pmd,
 	if (!pmd_none(*pmd))
 		return pte_offset_kernel(pmd, iova);
 
-	pte = (pte_t *)get_zeroed_page(GFP_ATOMIC);
+	pte = (pte_t *)ipmmu_alloc_page(mmu);
 	if (!pte)
 		return NULL;
 
@@ -616,7 +630,7 @@ static pmd_t *ipmmu_alloc_pmd(struct ipmmu_vmsa_device *mmu, pgd_t *pgd,
 	if (!pud_none(*pud))
 		return pmd_offset(pud, iova);
 
-	pmd = (pmd_t *)get_zeroed_page(GFP_ATOMIC);
+	pmd = (pmd_t *)ipmmu_alloc_page(mmu);
 	if (!pmd)
 		return NULL;
 
@@ -780,7 +794,7 @@ static void ipmmu_clear_pud(struct ipmmu_vmsa_device *mmu, pud_t *pud)
 	({ phys_addr_t pa = page_to_phys(table);
 	dev_dbg(mmu->dev, "freeing pgtable @PA %pap\n", &pa); });
 
-	__free_page(table);
+	ipmmu_free_page(mmu, table);
 }
 
 static void ipmmu_clear_pmd(struct ipmmu_vmsa_device *mmu, pud_t *pud,
@@ -802,7 +816,7 @@ static void ipmmu_clear_pmd(struct ipmmu_vmsa_device *mmu, pud_t *pud,
 		({ phys_addr_t pa = page_to_phys(table);
 		dev_dbg(mmu->dev, "freeing pgtable @PA %pap\n", &pa); });
 
-		__free_page(table);
+		ipmmu_free_page(mmu, table);
 	}
 
 	/* Check whether the PUD is still needed. */
@@ -849,7 +863,7 @@ static int ipmmu_split_pmd(struct ipmmu_vmsa_device *mmu, pmd_t *pmd)
 
 	dev_dbg(mmu->dev, "splitting PMD @VA 0x%p\n", pmd);
 
-	pte = (pte_t *)get_zeroed_page(GFP_ATOMIC);
+	pte = (pte_t *)ipmmu_alloc_page(mmu);
 	if (!pte)
 		return -ENOMEM;
 
@@ -983,7 +997,7 @@ static int ipmmu_domain_init(struct iommu_domain *io_domain)
 
 	spin_lock_init(&domain->lock);
 
-	domain->pgd = kzalloc(IPMMU_PTRS_PER_PGD * sizeof(pgd_t), GFP_KERNEL);
+	domain->pgd = ipmmu_alloc_page(NULL);
 	if (!domain->pgd) {
 		kfree(domain);
 		return -ENOMEM;
@@ -1069,10 +1083,14 @@ static void ipmmu_detach_device(struct iommu_domain *io_domain,
 	 */
 }
 
+static phys_addr_t ipmmu_iova_to_phys(struct iommu_domain *io_domain,
+				      dma_addr_t iova);
+
 static int ipmmu_map(struct iommu_domain *io_domain, unsigned long iova,
 		     phys_addr_t paddr, size_t size, int prot)
 {
 	struct ipmmu_vmsa_domain *domain = io_domain->priv;
+	int ret;
 
 	if (!domain)
 		return -ENODEV;
@@ -1082,7 +1100,13 @@ static int ipmmu_map(struct iommu_domain *io_domain, unsigned long iova,
 
 	ipmmu_perf_log(domain->mmu);
 
-	return ipmmu_create_mapping(domain, iova, paddr, size, prot);
+	ret = ipmmu_create_mapping(domain, iova, paddr, size, prot);
+
+	paddr = ipmmu_iova_to_phys(io_domain, iova);
+	dev_dbg(domain->mmu->dev, "%s(0x%08lx, %pap)\n",
+		 __func__, iova, &paddr);
+
+	return ret;
 }
 
 static size_t ipmmu_unmap(struct iommu_domain *io_domain, unsigned long iova,
